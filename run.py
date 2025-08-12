@@ -12,13 +12,14 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
 
-from utils.pdf import extract_pages
+from utils.pdf import extract_pages, count_pages
 from utils.text import normalize_text, split_sentences, visible_korean_ratio
 from utils.diff import simple_diff
 from checkers.base import BaseChecker
 from checkers.hanspell_checker import HanspellChecker
 from checkers.spacing_checker import SpacingChecker
 from checkers.rule_checker import RuleChecker
+from checkers.language_tool_checker import LanguageToolChecker
 
 def build_checkers(args):
     """인자에 따라 검사기들을 동적으로 빌드."""
@@ -34,9 +35,9 @@ def build_checkers(args):
     if args.spacing:
         try:
             checkers.append(SpacingChecker())
-            print(f"✓ PyKoSpacing 검사기 활성화")
+            print(f"✓ kr-spacing 검사기 활성화")
         except Exception as e:
-            print(f"✗ PyKoSpacing 검사기 비활성화: {e}")
+            print(f"✗ kr-spacing 검사기 비활성화: {e}")
     
     if args.rule:
         try:
@@ -44,6 +45,13 @@ def build_checkers(args):
             print(f"✓ Rule 검사기 활성화")
         except Exception as e:
             print(f"✗ Rule 검사기 비활성화: {e}")
+
+    if args.languagetool:
+        try:
+            checkers.append(LanguageToolChecker())
+            print(f"✓ LanguageTool 검사기 활성화")
+        except Exception as e:
+            print(f"✗ LanguageTool 검사기 비활성화: {e}")
     
     if not checkers:
         print("경고: 활성화된 검사기가 없습니다!")
@@ -93,8 +101,9 @@ def main():
     parser.add_argument("--ocr-threshold", type=int, default=50, help="OCR 트리거 문자 수")
     parser.add_argument("--hanspell", action="store_true", help="Hanspell 검사기 사용")
     parser.add_argument("--hanspell-rate", type=int, default=5, help="Hanspell 초당 요청 수")
-    parser.add_argument("--spacing", action="store_true", help="PyKoSpacing 검사기 사용")
+    parser.add_argument("--spacing", action="store_true", help="kr-spacing 검사기 사용")
     parser.add_argument("--rule", action="store_true", help="Rule 검사기 사용")
+    parser.add_argument("--languagetool", action="store_true", help="LanguageTool 검사기 사용")
     parser.add_argument("--rules-path", default="data/rules.yaml", help="규칙 파일 경로")
     parser.add_argument("--whitelist-path", default="data/whitelist.txt", help="화이트리스트 파일 경로")
     parser.add_argument("--format", choices=["csv", "xlsx", "both"], default="both", help="출력 형식")
@@ -102,10 +111,11 @@ def main():
     args = parser.parse_args()
     
     # 기본 검사기 활성화 (인자가 없으면)
-    if not any([args.hanspell, args.spacing, args.rule]):
+    if not any([args.hanspell, args.spacing, args.rule, args.languagetool]):
         args.hanspell = True
         args.spacing = True
         args.rule = True
+        args.languagetool = True
     
     # 출력 디렉토리 생성
     os.makedirs(args.out_dir, exist_ok=True)
@@ -119,67 +129,69 @@ def main():
     print(f"활성 검사기: {[c.name for c in checkers]}")
     
     # PDF에서 페이지별 텍스트 추출
-    pages = list(extract_pages(args.pdf_path, use_ocr=args.ocr, ocr_threshold=args.ocr_threshold))
-    print(f"총 {len(pages)} 페이지 처리")
-    
+    page_count = count_pages(args.pdf_path)
+    pages = extract_pages(args.pdf_path, use_ocr=args.ocr, ocr_threshold=args.ocr_threshold)
+    print(f"총 {page_count} 페이지 처리")
+
     rows = []
     total_sentences = 0
     flagged_sentences = 0
-    
-    # 페이지별 처리
-    for page_no, text, is_ocr in pages:
-        if not text.strip():
-            continue
-            
-        # 텍스트 정규화
-        normalized = normalize_text(text)
-        
-        # 한글 비율 체크
-        if visible_korean_ratio(normalized) < args.korean_ratio:
-            continue
-        
-        # 문장 분리
-        sentences = split_sentences(normalized)
-        sentences = [s for s in sentences if len(s.strip()) >= args.min_length]
-        total_sentences += len(sentences)
-        
-        if not sentences:
-            continue
-        
-        print(f"페이지 {page_no} 처리 중... ({len(sentences)} 문장, OCR: {is_ocr})")
-        
-        # 문장별 검사 (병렬 처리)
-        with ThreadPoolExecutor(max_workers=args.workers) as executor:
+
+    # 공용 스레드 풀
+    executor = ThreadPoolExecutor(max_workers=args.workers)
+    try:
+        # 페이지별 처리
+        for page_no, text, is_ocr in pages:
+            if not text.strip():
+                continue
+
+            # 텍스트 정규화
+            normalized = normalize_text(text)
+
+            # 한글 비율 체크
+            if visible_korean_ratio(normalized) < args.korean_ratio:
+                continue
+
+            # 문장 분리
+            sentences = split_sentences(normalized)
+            sentences = [s for s in sentences if len(s.strip()) >= args.min_length]
+            total_sentences += len(sentences)
+
+            if not sentences:
+                continue
+
+            print(f"페이지 {page_no} 처리 중... ({len(sentences)} 문장, OCR: {is_ocr})")
+
             futures = {executor.submit(check_sentence, s, checkers): s for s in sentences}
-            
+
             for future in as_completed(futures):
                 sentence = futures[future]
                 try:
                     flags, suggestions, metas = future.result()
-                    
+
                     if flags:  # OR 로직: 하나라도 플래그가 있으면
                         flagged_sentences += 1
-                        
+
                         # 대표 교정안
                         rep_suggestion = representative_suggestion(suggestions)
-                        
+
                         # 스니펫 생성
                         snippet = sentence[:args.snippet_length]
                         if len(sentence) > args.snippet_length:
                             snippet += "…"
-                        
+
                         # 오류 타입 추출 (rule 기반)
                         error_types = []
                         if "rule" in metas and metas["rule"]:
                             for hit in metas["rule"]:
                                 if isinstance(hit, dict) and "rule" in hit:
                                     error_types.append(hit["rule"])
-                        
+
                         # diff 생성
                         diff = ""
                         if rep_suggestion:
                             diff = simple_diff(sentence, rep_suggestion)
-                        
+
                         rows.append({
                             "page": page_no,
                             "sentence": sentence,
@@ -191,9 +203,11 @@ def main():
                             "diff": diff,
                             "is_ocr": is_ocr
                         })
-                        
+
                 except Exception as e:
                     print(f"문장 처리 오류: {e}")
+    finally:
+        executor.shutdown()
     
     # 결과 정렬 (우선순위: rule > 다중 검사기 > 단일 검사기)
     def sort_key(row):
@@ -222,7 +236,7 @@ def main():
     
     # 통계 출력
     print(f"\n=== 처리 완료 ===")
-    print(f"총 페이지: {len(pages)}")
+    print(f"총 페이지: {page_count}")
     print(f"총 문장: {total_sentences}")
     print(f"플래그된 문장: {flagged_sentences}")
     print(f"검출률: {flagged_sentences/total_sentences*100:.1f}%" if total_sentences > 0 else "검출률: 0%")
