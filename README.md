@@ -21,6 +21,19 @@ pip install -r requirements.txt
 python run.py
 ```
 
+### 웹 UI 사용
+
+간단한 웹 인터페이스를 통해 PDF를 업로드하고 검사기를 선택할 수 있습니다.
+
+```bash
+python app.py
+```
+
+브라우저에서 [http://localhost:5000](http://localhost:5000) 에 접속하여 PDF 파일을 업로드한 뒤
+검사기(Hanspell, Spacing, Rule, LanguageTool)와 출력 형식을 선택합니다.
+처리가 완료되면 `out/review.csv`와 `out/review.xlsx` 링크가 제공되며
+`viewer.html`로 결과를 시각화할 수도 있습니다.
+
 ## 출력 파일
 
 - `out/review.xlsx`: 검수 결과 (Excel)
