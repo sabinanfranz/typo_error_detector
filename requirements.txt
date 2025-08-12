@@ -6,4 +6,7 @@ rapidfuzz==3.6.1
 pyyaml==6.0.1
 pytesseract==0.3.10
 pillow==10.1.0
+pdfplumber==0.11.0
+kr-spacing==0.5.1
+language-tool-python==2.7.1
 git+https://github.com/ssut/py-hanspell.git

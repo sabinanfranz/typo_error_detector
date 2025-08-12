@@ -5,26 +5,26 @@ from typing import Dict, Optional
 from .base import BaseChecker
 
 class SpacingChecker(BaseChecker):
-    """PyKoSpacing 기반 띄어쓰기 검사기."""
+    """kr-spacing 기반 띄어쓰기 검사기."""
     name = "spacing"
-    
+
     def __init__(self, cache_file: str = "spacing_cache.json"):
         self.cache_file = cache_file
         self.cache = self._JsonCache(cache_file)
-        
-        # pykospacing 모듈 import 시도
+
+        # kr-spacing 모듈 import 시도
         try:
-            from pykospacing import Spacing
-            self.model = Spacing()
+            from krspacing import KRSpacing  # type: ignore
+            self.model = KRSpacing()
             self._available = True
         except ImportError:
-            print("경고: pykospacing 모듈을 찾을 수 없습니다. pip install pykospacing")
+            print("경고: krspacing 모듈을 찾을 수 없습니다. pip install kr-spacing")
             self._available = False
     
     def check(self, sentence: str) -> Dict:
         """문장의 띄어쓰기를 검사합니다."""
         if not self._available:
-            return {"flag": False, "meta": {"error": "pykospacing 모듈 없음"}}
+            return {"flag": False, "meta": {"error": "krspacing 모듈 없음"}}
         
         # 캐시 확인
         cached = self.cache.get(sentence)

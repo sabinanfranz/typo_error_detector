@@ -722,6 +722,28 @@
       const f = e.dataTransfer.files?.[0]; if (f){ pendingFile=f; }
     });
 
+    // 자동 로드: 동일 경로의 review.csv 있으면 시도
+    async function tryAutoLoad() {
+      try {
+        const resp = await fetch('out/review.csv').catch(()=>null);
+        if (resp && resp.ok) {
+          const text = await resp.text();
+          rawData = parseCSVText(text).map(normalizeRow);
+          if (rawData.length) {
+            show($('statsWrap'), true);
+            show($('chartsWrap'), true);
+            show($('filters'), true);
+            show($('tableWrap'), true);
+            summarize();
+            buildErrorTypeBox();
+            applyFilters();
+          }
+        }
+      } catch (e) {
+        console.warn('auto load failed', e);
+      }
+    }
+
     // ------- Load / Init -------
     async function loadFile(file) {
       try {
@@ -805,6 +827,7 @@
       show($('chartsWrap'), false);
       show($('filters'), false);
       show($('tableWrap'), false);
+      tryAutoLoad();
     })();
   </script>
 </body>

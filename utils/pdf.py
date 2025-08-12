@@ -6,6 +6,14 @@ import os
 from typing import Generator, Tuple
 import fitz  # PyMuPDF
 
+# 표/레이아웃 처리를 위한 pdfplumber (선택적)
+try:
+    import pdfplumber
+    PDFPLUMBER_AVAILABLE = True
+except Exception:
+    pdfplumber = None
+    PDFPLUMBER_AVAILABLE = False
+
 # OCR 모듈/경로 준비
 try:
     import pytesseract
@@ -32,14 +40,31 @@ def extract_pages(pdf_path: str, use_ocr: bool = False, ocr_threshold: int = 50)
     페이지별 텍스트 추출 제너레이터
     Yields: (page_number, text, is_ocr_used)
     """
-    doc = None
+    doc = plumber = None
     try:
         doc = fitz.open(pdf_path)
+        if PDFPLUMBER_AVAILABLE:
+            plumber = pdfplumber.open(pdf_path)
         for idx in range(len(doc)):
             page = doc.load_page(idx)
             page_no = idx + 1
 
             text = page.get_text("text") or ""
+
+            # 표 영역 텍스트 추출(pdfplumber)
+            if plumber:
+                try:
+                    p_page = plumber.pages[idx]
+                    tables = p_page.extract_tables()
+                    table_texts = []
+                    for table in tables:
+                        rows = [" ".join(filter(None, row)) for row in table]
+                        table_texts.append("\n".join(rows))
+                    if table_texts:
+                        text += "\n" + "\n".join(table_texts)
+                except Exception:
+                    pass
+
             is_ocr = False
 
             if use_ocr and OCR_AVAILABLE and _need_ocr(text, ocr_threshold):
@@ -56,6 +81,14 @@ def extract_pages(pdf_path: str, use_ocr: bool = False, ocr_threshold: int = 50)
     finally:
         if doc is not None:
             doc.close()
+        if plumber is not None:
+            plumber.close()
+
+
+def count_pages(pdf_path: str) -> int:
+    """PDF 페이지 수 반환"""
+    with fitz.open(pdf_path) as doc:
+        return len(doc)
 
 
 def _need_ocr(text: str, threshold: int) -> bool:
