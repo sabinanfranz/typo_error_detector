@@ -1,324 +1,811 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>한국어 PDF 오탈자 검수 결과 뷰어</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#3B82F6',
-                        secondary: '#6B7280',
-                        success: '#10B981',
-                        warning: '#F59E0B',
-                        danger: '#EF4444'
-                    }
-                }
-            }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>한국어 PDF 오탈자 검수 결과 뷰어 – 업그레이드</title>
+
+  <!-- TailwindCSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3B82F6',
+            success: '#10B981',
+            warning: '#F59E0B',
+            danger:  '#EF4444',
+            info:    '#06B6D4',
+          }
         }
-    </script>
+      }
+    }
+  </script>
+
+  <!-- CSV/XLSX/Chart -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <style>
+    .truncate-2 {
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      line-clamp: 2;
+      overflow: hidden;
+    }
+    .diff { white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .diff .del { background:#fee2e2; text-decoration: line-through; border-radius:.25rem; }
+    .diff .ins { background:#dcfce7; border-radius:.25rem; }
+    .dropzone { border:2px dashed #93c5fd; }
+    .chip { display:inline-flex; align-items:center; gap:.35rem; padding:.15rem .5rem; border-radius:9999px; font-size:.75rem; }
+    .chip-hanspell { background:#dbeafe; color:#1d4ed8; }
+    .chip-spacing  { background:#dcfce7; color:#166534; }
+    .chip-rule     { background:#fef9c3; color:#854d0e; }
+    .chip-ocr      { background:#cffafe; color:#155e75; }
+    th.sortable { cursor:pointer; }
+    th.sortable .arrow { opacity:.35; }
+    th.sortable[aria-sort="asc"] .arrow.asc { opacity:1 }
+    th.sortable[aria-sort="desc"] .arrow.desc { opacity:1 }
+  </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
-    <div class="container mx-auto px-4 py-8">
-        <!-- 헤더 -->
-        <header class="mb-8">
-            <h1 class="text-3xl font-bold text-gray-900 mb-2">한국어 PDF 오탈자 검수 결과</h1>
-            <p class="text-gray-600">검수된 PDF의 오탈자, 맞춤법, 띄어쓰기 오류를 확인하세요</p>
-        </header>
 
-        <!-- 파일 업로드 섹션 -->
-        <div class="bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">검수 결과 파일 업로드</h2>
-            <div class="flex items-center space-x-4">
-                <input type="file" id="csvFile" accept=".csv" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90">
-                <button onclick="loadCSV()" class="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition-colors">로드</button>
-            </div>
-            <p class="text-sm text-gray-500 mt-2">CSV 파일을 선택하고 로드 버튼을 클릭하세요</p>
-        </div>
+<body class="bg-gray-50 text-gray-900">
+  <div class="max-w-7xl mx-auto px-4 py-8">
 
-        <!-- 통계 섹션 -->
-        <div id="statsSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">검수 통계</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div class="bg-blue-50 p-4 rounded-lg">
-                    <div class="text-2xl font-bold text-blue-600" id="totalPages">0</div>
-                    <div class="text-sm text-blue-600">총 페이지</div>
-                </div>
-                <div class="bg-green-50 p-4 rounded-lg">
-                    <div class="text-2xl font-bold text-green-600" id="totalSentences">0</div>
-                    <div class="text-sm text-green-600">총 문장</div>
-                </div>
-                <div class="bg-yellow-50 p-4 rounded-lg">
-                    <div class="text-2xl font-bold text-yellow-600" id="flaggedSentences">0</div>
-                    <div class="text-sm text-yellow-600">오류 발견</div>
-                </div>
-                <div class="bg-red-50 p-4 rounded-lg">
-                    <div class="text-2xl font-bold text-red-600" id="detectionRate">0%</div>
-                    <div class="text-sm text-red-600">검출률</div>
-                </div>
-            </div>
+    <!-- Header -->
+    <header class="mb-6">
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-bold">한국어 PDF 오탈자 검수 결과 뷰어</h1>
+          <p class="text-sm text-gray-600">CSV 또는 XLSX(review.csv / review.xlsx) 파일을 불러와서 필터·정렬·검색·내보내기를 수행</p>
         </div>
+        <div class="flex items-center gap-2">
+          <button id="btnExportCSV" class="px-3 py-2 rounded-md bg-primary text-white text-sm hover:bg-blue-600 disabled:opacity-40" disabled>필터 결과 CSV 다운로드</button>
+          <button id="btnExportXLSX" class="px-3 py-2 rounded-md bg-primary text-white text-sm hover:bg-blue-600 disabled:opacity-40" disabled>필터 결과 XLSX 다운로드</button>
+          <button id="btnReset" class="px-3 py-2 rounded-md border text-sm hover:bg-gray-100">리셋</button>
+        </div>
+      </div>
+    </header>
 
-        <!-- 필터 섹션 -->
-        <div id="filterSection" class="hidden bg-white rounded-lg shadow-md p-6 mb-8">
-            <h2 class="text-xl font-semibold text-gray-900 mb-4">필터</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">페이지 범위</label>
-                    <div class="flex space-x-2">
-                        <input type="number" id="pageFrom" placeholder="시작" class="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                        <span class="text-gray-500 self-center">~</span>
-                        <input type="number" id="pageTo" placeholder="끝" class="w-20 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">검사기</label>
-                    <select id="sourceFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                        <option value="">전체</option>
-                        <option value="hanspell">Hanspell</option>
-                        <option value="spacing">PyKoSpacing</option>
-                        <option value="rule">규칙 기반</option>
-                    </select>
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">오류 유형</label>
-                    <select id="errorTypeFilter" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary">
-                        <option value="">전체</option>
-                    </select>
-                </div>
-                <div class="flex items-end">
-                    <button onclick="applyFilters()" class="w-full px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 transition-colors">필터 적용</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- 결과 테이블 -->
-        <div id="resultsSection" class="hidden bg-white rounded-lg shadow-md overflow-hidden">
-            <div class="px-6 py-4 border-b border-gray-200">
-                <h2 class="text-xl font-semibold text-gray-900">검수 결과</h2>
-                <p class="text-sm text-gray-600 mt-1">총 <span id="resultCount">0</span>건의 오류가 발견되었습니다</p>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-gray-200">
-                    <thead class="bg-gray-50">
-                        <tr>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">페이지</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">문장</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">검사기</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">오류 유형</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">교정 제안</th>
-                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Diff</th>
-                        </tr>
-                    </thead>
-                    <tbody id="resultsTableBody" class="bg-white divide-y divide-gray-200">
-                        <!-- 결과가 여기에 동적으로 추가됩니다 -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- 로딩 표시 -->
-        <div id="loadingSection" class="hidden text-center py-12">
-            <div class="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <p class="mt-2 text-gray-600">파일을 처리하는 중...</p>
-        </div>
-
-        <!-- 오류 메시지 -->
-        <div id="errorSection" class="hidden bg-red-50 border border-red-200 rounded-lg p-4">
-            <p class="text-red-800" id="errorMessage"></p>
-        </div>
+    <!-- Loader / Error -->
+    <div id="loading" class="hidden flex items-center gap-2 mb-4 text-primary">
+      <svg class="animate-spin h-5 w-5" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4A4 4 0 004 12z"/></svg>
+      <span>처리 중…</span>
     </div>
+    <div id="errorBox" class="hidden mb-4 p-3 rounded-md border border-red-200 bg-red-50 text-red-700 text-sm"></div>
 
-    <script>
-        let csvData = [];
-        let filteredData = [];
+    <!-- Uploader -->
+    <section class="bg-white rounded-lg shadow-sm p-5 mb-6">
+      <h2 class="font-semibold mb-3">검수 결과 파일 업로드</h2>
+      <div class="flex flex-col md:flex-row gap-3 md:items-center">
+        <label class="shrink-0 inline-flex items-center px-3 py-2 rounded-md bg-primary text-white text-sm cursor-pointer hover:bg-blue-600">
+          파일 선택
+          <input id="fileInput" type="file" accept=".csv,.xlsx" class="hidden">
+        </label>
+        <div id="dropzone" class="dropzone w-full rounded-md p-4 text-sm text-blue-700 bg-blue-50/40">
+          여기로 CSV/XLSX 파일을 드래그 앤 드롭하거나, “파일 선택” 클릭
+        </div>
+        <button id="btnLoad" class="px-4 py-2 rounded-md bg-primary text-white text-sm hover:bg-blue-600">로드</button>
+      </div>
+      <p class="text-xs text-gray-500 mt-2">필수 컬럼: page, sentence, sources, error_types, representative_suggestion, diff, is_ocr(선택)</p>
+    </section>
 
-        function loadCSV() {
-            const fileInput = document.getElementById('csvFile');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                showError('파일을 선택해주세요.');
-                return;
-            }
+    <!-- Stats -->
+    <section id="statsWrap" class="hidden grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-xs text-gray-500">총 행(오류 건)</div>
+        <div id="statRows" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-xs text-gray-500">고유 페이지 수</div>
+        <div id="statPages" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-xs text-gray-500">OCR 포함 행</div>
+        <div id="statOCR" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-xs text-gray-500">다중 검사기 히트</div>
+        <div id="statMulti" class="text-2xl font-bold">0</div>
+      </div>
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-xs text-gray-500">현재 필터 결과</div>
+        <div id="statFiltered" class="text-2xl font-bold">0</div>
+      </div>
+    </section>
 
-            showLoading(true);
-            showError(false);
+    <!-- Charts -->
+    <section id="chartsWrap" class="hidden grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-sm font-semibold mb-2">검사기별 분포</div>
+        <canvas id="chartSources" height="120"></canvas>
+      </div>
+      <div class="bg-white rounded-lg p-4 shadow-sm">
+        <div class="text-sm font-semibold mb-2">오류 유형 Top 10</div>
+        <canvas id="chartErrors" height="120"></canvas>
+      </div>
+    </section>
 
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const csv = e.target.result;
-                    csvData = parseCSV(csv);
-                    filteredData = [...csvData];
-                    
-                    showLoading(false);
-                    displayResults();
-                    updateStats();
-                    populateFilters();
-                } catch (error) {
-                    showLoading(false);
-                    showError('CSV 파일을 파싱하는 중 오류가 발생했습니다: ' + error.message);
-                }
-            };
-            reader.readAsText(file, 'UTF-8');
+    <!-- Filters -->
+    <section id="filters" class="hidden bg-white rounded-lg p-5 shadow-sm mb-3">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">페이지 범위</label>
+          <div class="flex items-center gap-2">
+            <input id="fPageFrom" type="number" class="w-24 px-2 py-1 border rounded-md" placeholder="시작">
+            <span class="text-gray-500">~</span>
+            <input id="fPageTo" type="number" class="w-24 px-2 py-1 border rounded-md" placeholder="끝">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">검색(문장/교정/Diff)</label>
+          <input id="fQuery" type="text" class="w-full px-2 py-1 border rounded-md" placeholder="키워드 입력">
+          <div class="mt-1 flex items-center gap-3 text-xs text-gray-600">
+            <label class="inline-flex items-center gap-1"><input id="fCase" type="checkbox" class="accent-primary">대소문자 구분</label>
+            <label class="inline-flex items-center gap-1"><input id="fRegex" type="checkbox" class="accent-primary">정규식</label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">검사기</label>
+          <div class="grid grid-cols-3 gap-x-2 gap-y-1 text-sm">
+            <label class="inline-flex items-center gap-1"><input class="srcCheck accent-primary" type="checkbox" value="hanspell">Hanspell</label>
+            <label class="inline-flex items-center gap-1"><input class="srcCheck accent-primary" type="checkbox" value="spacing">Spacing</label>
+            <label class="inline-flex items-center gap-1"><input class="srcCheck accent-primary" type="checkbox" value="rule">Rule</label>
+          </div>
+          <div class="mt-1 text-xs text-gray-600 flex items-center gap-2">
+            <label class="inline-flex items-center gap-1"><input id="fSrcMode" type="checkbox" class="accent-primary">AND 모드</label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">오류 유형</label>
+          <div id="errorTypeBox" class="grid grid-cols-2 gap-x-2 gap-y-1 max-h-28 overflow-auto text-sm border rounded-md p-2"></div>
+        </div>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-3 text-sm">
+        <label class="inline-flex items-center gap-1"><input id="fOnlyOCR" type="checkbox" class="accent-primary">OCR만</label>
+        <label class="inline-flex items-center gap-1"><input id="fOnlyMulti" type="checkbox" class="accent-primary">다중 검사기 히트만</label>
+        <label class="inline-flex items-center gap-1"><input id="fOnlyRule" type="checkbox" class="accent-primary">Rule 포함만</label>
+        <button id="btnApply" class="px-3 py-1.5 rounded-md bg-primary text-white hover:bg-blue-600">필터 적용</button>
+        <button id="btnClear" class="px-3 py-1.5 rounded-md border hover:bg-gray-100">필터 초기화</button>
+      </div>
+    </section>
+
+    <!-- Table -->
+    <section id="tableWrap" class="hidden bg-white rounded-lg shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b flex items-center justify-between">
+        <div>
+          <div class="text-sm font-semibold">검수 결과</div>
+          <div class="text-xs text-gray-600">현재 표시: <span id="lblCount">0</span>건</div>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <label>페이지당
+            <select id="pageSize" class="ml-1 border rounded-md px-2 py-1">
+              <option>25</option><option>50</option><option selected>100</option><option>200</option>
+            </select>
+          </label>
+          <div class="flex items-center gap-1">
+            <button id="btnPrev" class="px-2 py-1 border rounded-md">이전</button>
+            <span class="text-xs text-gray-600">페이지 <span id="curPage">1</span> / <span id="maxPage">1</span></span>
+            <button id="btnNext" class="px-2 py-1 border rounded-md">다음</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+            <tr>
+              <th class="px-4 py-2 w-16 sortable" data-key="page" aria-sort="none">페이지
+                <span class="inline-block ml-1 align-middle">
+                  <span class="arrow asc">▲</span><span class="arrow desc">▼</span>
+                </span>
+              </th>
+              <th class="px-4 py-2">문장</th>
+              <th class="px-4 py-2 w-40 sortable" data-key="sources" aria-sort="none">검사기
+                <span class="inline-block ml-1 align-middle">
+                  <span class="arrow asc">▲</span><span class="arrow desc">▼</span>
+                </span>
+              </th>
+              <th class="px-4 py-2 w-56 sortable" data-key="error_types" aria-sort="none">오류 유형
+                <span class="inline-block ml-1 align-middle">
+                  <span class="arrow asc">▲</span><span class="arrow desc">▼</span>
+                </span>
+              </th>
+              <th class="px-4 py-2 w-[22rem]">교정 제안</th>
+              <th class="px-4 py-2 w-[22rem]">Diff</th>
+              <th class="px-4 py-2 w-24">액션</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="text-sm divide-y"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="fixed inset-0 bg-black/40 hidden items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-lg shadow-xl max-w-3xl w-full">
+      <div class="px-5 py-3 border-b flex items-center justify-between">
+        <div class="font-semibold">상세 보기</div>
+        <button id="modalClose" class="text-gray-500 hover:text-gray-800">&times;</button>
+      </div>
+      <div id="modalBody" class="p-5 space-y-4 text-sm"></div>
+    </div>
+  </div>
+
+  <script>
+    // ------- State -------
+    let rawData = [];          // 전체 로우
+    let filtered = [];         // 필터 결과
+    let sortKey = 'page';
+    let sortDir = 'asc';
+    let pageSize = 100;
+    let pageIndex = 0;         // 0-based
+
+    let chartSources, chartErrors;
+
+    // ------- Utils -------
+    const $ = (id) => document.getElementById(id);
+    const show = (el, v=true) => el.classList.toggle('hidden', !v);
+    const toBool = (v) => (String(v).toLowerCase() === 'true' || v === true);
+
+    function error(msg) {
+      const box = $('errorBox');
+      box.textContent = msg || '';
+      show(box, !!msg);
+    }
+
+    function loading(v) { show($('loading'), v); }
+
+    function parseCSVText(text) {
+      const res = Papa.parse(text, { header:true, skipEmptyLines:true });
+      if (res.errors?.length) throw new Error(res.errors[0].message || 'CSV 파싱 오류');
+      return res.data;
+    }
+
+    async function parseFile(file) {
+      const ext = file.name.split('.').pop().toLowerCase();
+      if (ext === 'csv') {
+        const text = await file.text();
+        return parseCSVText(text);
+      } else if (ext === 'xlsx') {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, {type:'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        return XLSX.utils.sheet_to_json(sheet, {defval:''});
+      } else {
+        throw new Error('CSV 또는 XLSX만 지원');
+      }
+    }
+
+    function normalizeRow(row) {
+      // 필수 컬럼 스펙 정리
+      const page = parseInt(row.page || row.Page || row.PAGE || '0', 10) || 0;
+      const sentence = row.sentence ?? row.Sentence ?? '';
+      const sources = String(row.sources ?? row.Sources ?? '').trim();
+      const error_types = String(row.error_types ?? row.Error_Types ?? row.ErrorTypes ?? '').trim();
+      const representative_suggestion = row.representative_suggestion ?? row.Representative_Suggestion ?? '';
+      const diff = row.diff ?? row.Diff ?? '';
+      const is_ocr = toBool(row.is_ocr ?? row.IS_OCR ?? row.ocr ?? false);
+      const suggestion_by_source = row.suggestion_by_source ?? row.Suggestion_By_Source ?? '';
+
+      // 파생
+      const sourceList = sources ? sources.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const errorList  = error_types ? error_types.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const multi      = sourceList.length >= 2;
+
+      return { page, sentence, sources, error_types, representative_suggestion, diff, is_ocr, suggestion_by_source, _sourceList:sourceList, _errorList:errorList, _multi:multi };
+    }
+
+    function summarize() {
+      const pages = new Set(rawData.map(r => r.page));
+      const ocr = rawData.filter(r => r.is_ocr).length;
+      const multi = rawData.filter(r => r._multi).length;
+      $('statRows').textContent = rawData.length.toLocaleString();
+      $('statPages').textContent = pages.size.toLocaleString();
+      $('statOCR').textContent = ocr.toLocaleString();
+      $('statMulti').textContent = multi.toLocaleString();
+    }
+
+    function buildErrorTypeBox() {
+      const box = $('errorTypeBox');
+      box.innerHTML = '';
+      const set = new Set();
+      rawData.forEach(r => r._errorList.forEach(e => set.add(e)));
+      [...set].sort().forEach(e => {
+        const id = 'err_' + btoa(e).replace(/=/g,'');
+        const div = document.createElement('label');
+        div.className = 'inline-flex items-center gap-1';
+        div.innerHTML = `<input type="checkbox" class="errCheck accent-primary" value="${e}"><span class="truncate" title="${e}">${e}</span>`;
+        box.appendChild(div);
+      });
+    }
+
+    function countsBySource(rows) {
+      const cnt = { hanspell:0, spacing:0, rule:0 };
+      rows.forEach(r => r._sourceList.forEach(s => { if (cnt[s] != null) cnt[s]++ }));
+      return cnt;
+    }
+
+    function countsByError(rows) {
+      const map = new Map();
+      rows.forEach(r => r._errorList.forEach(e => map.set(e, (map.get(e)||0)+1)));
+      // Top 10
+      return [...map.entries()].sort((a,b)=>b[1]-a[1]).slice(0,10);
+    }
+
+    function updateCharts() {
+      const src = countsBySource(filtered);
+      const err = countsByError(filtered);
+      const c1 = $('chartSources').getContext('2d');
+      const c2 = $('chartErrors').getContext('2d');
+
+      if (chartSources) chartSources.destroy();
+      if (chartErrors) chartErrors.destroy();
+
+      chartSources = new Chart(c1, {
+        type:'bar',
+        data:{ labels:['hanspell','spacing','rule'], datasets:[{ label:'건수', data:[src.hanspell, src.spacing, src.rule] }] },
+        options:{ responsive:true, plugins:{legend:{display:false}} }
+      });
+
+      chartErrors = new Chart(c2, {
+        type:'bar',
+        data:{ labels: err.map(e=>e[0]), datasets:[{ label:'건수', data: err.map(e=>e[1]) }] },
+        options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}} }
+      });
+    }
+
+    function applyFilters() {
+      const pf = parseInt($('fPageFrom').value || '0', 10);
+      const pt = parseInt($('fPageTo').value || '2147483647', 10);
+      const onlyOCR  = $('fOnlyOCR').checked;
+      const onlyMulti= $('fOnlyMulti').checked;
+      const onlyRule = $('fOnlyRule').checked;
+
+      // sources
+      const srcChecks = [...document.querySelectorAll('.srcCheck:checked')].map(i=>i.value);
+      const srcAndMode = $('fSrcMode').checked;
+
+      // errors
+      const errChecks = [...document.querySelectorAll('.errCheck:checked')].map(i=>i.value);
+
+      // query
+      const q = $('fQuery').value;
+      const useRegex = $('fRegex').checked;
+      const useCase  = $('fCase').checked;
+      let re = null;
+      if (q) {
+        if (useRegex) {
+          try {
+            re = new RegExp(q, useCase ? '' : 'i');
+          } catch(e) {
+            error('정규식 오류: ' + e.message);
+            return;
+          }
+        } else {
+          re = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), useCase ? '' : 'i');
+        }
+      }
+
+      filtered = rawData.filter(r => {
+        if (!(r.page >= pf && r.page <= pt)) return false;
+        if (onlyOCR && !r.is_ocr) return false;
+        if (onlyMulti && !r._multi) return false;
+        if (onlyRule && !r._sourceList.includes('rule')) return false;
+
+        if (srcChecks.length) {
+          if (srcAndMode) {
+            // 모두 포함(AND)
+            if (!srcChecks.every(s => r._sourceList.includes(s))) return false;
+          } else {
+            // 하나라도 포함(OR)
+            if (!srcChecks.some(s => r._sourceList.includes(s))) return false;
+          }
         }
 
-        function parseCSV(csv) {
-            const lines = csv.split('\n');
-            const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            const data = [];
-
-            for (let i = 1; i < lines.length; i++) {
-                if (lines[i].trim()) {
-                    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-                    const row = {};
-                    headers.forEach((header, index) => {
-                        row[header] = values[index] || '';
-                    });
-                    data.push(row);
-                }
-            }
-
-            return data;
+        if (errChecks.length) {
+          if (!errChecks.some(e => r._errorList.includes(e))) return false;
         }
 
-        function displayResults() {
-            const resultsSection = document.getElementById('resultsSection');
-            const filterSection = document.getElementById('filterSection');
-            const statsSection = document.getElementById('statsSection');
-            
-            resultsSection.classList.remove('hidden');
-            filterSection.classList.remove('hidden');
-            statsSection.classList.remove('hidden');
-
-            updateTable();
+        if (re) {
+          const target = `${r.sentence}\n${r.representative_suggestion}\n${r.diff}`;
+          if (!re.test(target)) return false;
         }
 
-        function updateTable() {
-            const tbody = document.getElementById('resultsTableBody');
-            const resultCount = document.getElementById('resultCount');
-            
-            resultCount.textContent = filteredData.length;
-            
-            tbody.innerHTML = '';
-            
-            filteredData.forEach((row, index) => {
-                const tr = document.createElement('tr');
-                tr.className = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-                
-                tr.innerHTML = `
-                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${row.page || ''}</td>
-                    <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                        <div class="truncate" title="${row.sentence || ''}">${row.sentence || ''}</div>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            ${row.sources || ''}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                            ${row.error_types || ''}
-                        </span>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                        <div class="truncate" title="${row.representative_suggestion || ''}">${row.representative_suggestion || ''}</div>
-                    </td>
-                    <td class="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                        <div class="truncate font-mono text-xs" title="${row.diff || ''}">${row.diff || ''}</div>
-                    </td>
-                `;
-                
-                tbody.appendChild(tr);
-            });
+        return true;
+      });
+
+      $('statFiltered').textContent = filtered.length.toLocaleString();
+      pageIndex = 0;
+      updateTable();
+      updateCharts();
+      $('lblCount').textContent = filtered.length.toLocaleString();
+      $('btnExportCSV').disabled = filtered.length === 0;
+      $('btnExportXLSX').disabled = filtered.length === 0;
+
+      // 상태 저장
+      saveFilterState();
+    }
+
+    function clearFilters() {
+      $('fPageFrom').value = '';
+      $('fPageTo').value = '';
+      $('fOnlyOCR').checked = false;
+      $('fOnlyMulti').checked = false;
+      $('fOnlyRule').checked = false;
+      $('fSrcMode').checked = false;
+      $('fQuery').value = '';
+      $('fRegex').checked = false;
+      $('fCase').checked = false;
+      document.querySelectorAll('.srcCheck, .errCheck').forEach(i => i.checked = false);
+      applyFilters();
+    }
+
+    function renderSourceChips(srcList, isOCR, isMulti) {
+      const wrap = document.createElement('div');
+      wrap.className = 'flex flex-wrap gap-1';
+      srcList.forEach(s => {
+        const span = document.createElement('span');
+        span.className = 'chip ' + (s==='hanspell'?'chip-hanspell':s==='spacing'?'chip-spacing':'chip-rule');
+        span.textContent = s;
+        wrap.appendChild(span);
+      });
+      if (isOCR) {
+        const span = document.createElement('span'); span.className='chip chip-ocr'; span.textContent='OCR';
+        wrap.appendChild(span);
+      }
+      if (isMulti) {
+        const span = document.createElement('span'); span.className='chip bg-purple-100 text-purple-700'; span.textContent='multi';
+        wrap.appendChild(span);
+      }
+      return wrap;
+    }
+
+    function renderErrorChips(errList) {
+      const wrap = document.createElement('div');
+      wrap.className = 'flex flex-wrap gap-1';
+      errList.forEach(e => {
+        const span = document.createElement('span');
+        span.className = 'chip bg-yellow-100 text-yellow-800';
+        span.title = e; span.textContent = e || '(유형 없음)';
+        wrap.appendChild(span);
+      });
+      if (!errList.length) {
+        const span = document.createElement('span');
+        span.className = 'chip bg-gray-100 text-gray-500';
+        span.textContent = '—';
+        wrap.appendChild(span);
+      }
+      return wrap;
+    }
+
+    function renderDiffText(diff) {
+      if (!diff) return document.createTextNode('');
+      // [-삭제-] / [+추가+]
+      const frag = document.createElement('span'); frag.className = 'diff';
+      let i = 0;
+      while (i < diff.length) {
+        if (diff.startsWith('[-', i)) {
+          const j = diff.indexOf('-]', i+2);
+          if (j !== -1) {
+            const delText = diff.slice(i+2, j);
+            const span = document.createElement('span'); span.className='del'; span.textContent = delText;
+            frag.appendChild(span); i = j+2; continue;
+          }
         }
-
-        function updateStats() {
-            if (csvData.length === 0) return;
-
-            const pages = new Set(csvData.map(row => row.page)).size;
-            const totalSentences = csvData.length;
-            const flaggedSentences = csvData.length;
-            const detectionRate = totalSentences > 0 ? Math.round((flaggedSentences / totalSentences) * 100) : 0;
-
-            document.getElementById('totalPages').textContent = pages;
-            document.getElementById('totalSentences').textContent = totalSentences.toLocaleString();
-            document.getElementById('flaggedSentences').textContent = flaggedSentences.toLocaleString();
-            document.getElementById('detectionRate').textContent = detectionRate + '%';
+        if (diff.startsWith('[+', i)) {
+          const j = diff.indexOf('+]', i+2);
+          if (j !== -1) {
+            const insText = diff.slice(i+2, j);
+            const span = document.createElement('span'); span.className='ins'; span.textContent = insText;
+            frag.appendChild(span); i = j+2; continue;
+          }
         }
+        // normal char
+        frag.appendChild(document.createTextNode(diff[i])); i++;
+      }
+      return frag;
+    }
 
-        function populateFilters() {
-            if (csvData.length === 0) return;
+    function cmp(a, b) {
+      if (a === b) return 0;
+      return (a > b) ? 1 : -1;
+    }
 
-            // 오류 유형 필터 옵션 생성
-            const errorTypes = new Set();
-            csvData.forEach(row => {
-                if (row.error_types) {
-                    row.error_types.split(',').forEach(type => {
-                        errorTypes.add(type.trim());
-                    });
-                }
-            });
-
-            const errorTypeFilter = document.getElementById('errorTypeFilter');
-            errorTypeFilter.innerHTML = '<option value="">전체</option>';
-            Array.from(errorTypes).sort().forEach(type => {
-                const option = document.createElement('option');
-                option.value = type;
-                option.textContent = type;
-                errorTypeFilter.appendChild(option);
-            });
+    function sortData() {
+      filtered.sort((a,b) => {
+        let va = a[sortKey], vb = b[sortKey];
+        if (sortKey === 'sources' || sortKey === 'error_types') {
+          va = (va||'').toLowerCase(); vb=(vb||'').toLowerCase();
         }
+        const r = cmp(va,vb);
+        return sortDir === 'asc' ? r : -r;
+      });
+    }
 
-        function applyFilters() {
-            const pageFrom = parseInt(document.getElementById('pageFrom').value) || 0;
-            const pageTo = parseInt(document.getElementById('pageTo').value) || 999999;
-            const sourceFilter = document.getElementById('sourceFilter').value;
-            const errorTypeFilter = document.getElementById('errorTypeFilter').value;
+    function updateTable() {
+      sortData();
+      const tbody = $('tbody');
+      tbody.innerHTML = '';
+      const total = filtered.length;
+      const ps = pageSize;
+      const start = pageIndex * ps;
+      const end = Math.min(start + ps, total);
+      $('curPage').textContent = (pageIndex+1);
+      $('maxPage').textContent = Math.max(1, Math.ceil(total / ps));
 
-            filteredData = csvData.filter(row => {
-                const page = parseInt(row.page) || 0;
-                const pageMatch = page >= pageFrom && page <= pageTo;
-                
-                const sourceMatch = !sourceFilter || (row.sources && row.sources.includes(sourceFilter));
-                
-                const errorTypeMatch = !errorTypeFilter || (row.error_types && row.error_types.includes(errorTypeFilter));
-                
-                return pageMatch && sourceMatch && errorTypeMatch;
-            });
+      for (let i=start; i<end; i++) {
+        const r = filtered[i];
+        const tr = document.createElement('tr');
+        tr.className = (i % 2 === 0) ? 'bg-white' : 'bg-gray-50';
+        const tdPage = `<td class="px-4 py-2 align-top">${r.page}</td>`;
+        const tdSent = `<td class="px-4 py-2 align-top"><div class="truncate-2" title="${escapeHtml(r.sentence)}">${escapeHtml(r.sentence)}</div></td>`;
+        const tdSug  = `<td class="px-4 py-2 align-top"><div class="truncate-2" title="${escapeHtml(r.representative_suggestion)}">${escapeHtml(r.representative_suggestion)}</div></td>`;
 
-            updateTable();
-        }
+        // build row
+        const tds = document.createElement('td'); tds.className='px-4 py-2 align-top';
+        tds.appendChild(renderSourceChips(r._sourceList, r.is_ocr, r._multi));
 
-        function showLoading(show) {
-            const loadingSection = document.getElementById('loadingSection');
-            if (show) {
-                loadingSection.classList.remove('hidden');
-            } else {
-                loadingSection.classList.add('hidden');
-            }
-        }
+        const tde = document.createElement('td'); tde.className='px-4 py-2 align-top';
+        tde.appendChild(renderErrorChips(r._errorList));
 
-        function showError(show, message = '') {
-            const errorSection = document.getElementById('errorSection');
-            const errorMessage = document.getElementById('errorMessage');
-            
-            if (show) {
-                errorSection.classList.remove('hidden');
-                errorMessage.textContent = message;
-            } else {
-                errorSection.classList.add('hidden');
-            }
-        }
+        const tdd = document.createElement('td'); tdd.className='px-4 py-2 align-top';
+        tdd.appendChild(renderDiffText(r.diff));
 
-        // 페이지 로드 시 초기화
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('한국어 PDF 오탈자 검수 결과 뷰어가 로드되었습니다.');
+        const actions = document.createElement('td'); actions.className='px-4 py-2 align-top';
+        actions.innerHTML = `
+          <div class="flex flex-col gap-1">
+            <button class="px-2 py-1 rounded-md border text-xs hover:bg-gray-100 btn-detail">상세</button>
+            <button class="px-2 py-1 rounded-md border text-xs hover:bg-gray-100 btn-copy" data-what="sentence">문장 복사</button>
+            <button class="px-2 py-1 rounded-md border text-xs hover:bg-gray-100 btn-copy" data-what="suggestion">제안 복사</button>
+          </div>
+        `;
+
+        tr.insertAdjacentHTML('beforeend', tdPage);
+        tr.insertAdjacentHTML('beforeend', tdSent);
+        tr.appendChild(tds);
+        tr.appendChild(tde);
+        tr.insertAdjacentHTML('beforeend', tdSug);
+        tr.appendChild(tdd);
+        tr.appendChild(actions);
+
+        // actions
+        tr.querySelector('.btn-detail').addEventListener('click', () => openDetail(r));
+        tr.querySelectorAll('.btn-copy').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const what = btn.getAttribute('data-what');
+            const txt = what === 'sentence' ? r.sentence : r.representative_suggestion;
+            navigator.clipboard.writeText(txt || '').then(()=>{})
+          });
         });
-    </script>
+
+        tbody.appendChild(tr);
+      }
+    }
+
+    function escapeHtml(s='') {
+      return s.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+    }
+
+    function openDetail(r) {
+      const b = $('modalBody');
+      b.innerHTML = `
+        <div class="flex flex-wrap items-center gap-2 text-xs">
+          <span class="px-2 py-1 rounded bg-gray-100">page ${r.page}</span>
+          ${r.is_ocr ? '<span class="px-2 py-1 rounded chip-ocr">OCR</span>' : ''}
+          ${r._multi ? '<span class="px-2 py-1 rounded bg-purple-100 text-purple-700">multi</span>' : ''}
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">문장</div>
+          <div class="p-3 rounded border bg-gray-50">${escapeHtml(r.sentence)}</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">교정 제안</div>
+          <div class="p-3 rounded border bg-green-50">${escapeHtml(r.representative_suggestion || '—')}</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">Diff</div>
+          <div class="p-3 rounded border bg-white">${renderDiffText(r.diff).outerHTML || '—'}</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">검사기 / 오류 유형</div>
+          <div class="flex flex-wrap gap-2 mb-2">${renderSourceChips(r._sourceList, r.is_ocr, r._multi).outerHTML}</div>
+          <div class="flex flex-wrap gap-2">${renderErrorChips(r._errorList).outerHTML}</div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">원본 제안 데이터(JSON)</div>
+          <pre class="p-3 rounded border bg-gray-50 overflow-auto text-xs">${escapeHtml(r.suggestion_by_source || '')}</pre>
+        </div>
+      `;
+      $('modal').classList.remove('hidden');
+      $('modal').classList.add('flex');
+    }
+
+    function closeDetail(){ $('modal').classList.add('hidden'); $('modal').classList.remove('flex'); }
+
+    function exportCSV(rows) {
+      const headers = ["page","is_ocr","sources","error_types","sentence","representative_suggestion","diff","suggestion_by_source"];
+      const data = rows.map(r => [
+        r.page,
+        r.is_ocr,
+        r.sources,
+        r.error_types,
+        r.sentence ?? '',
+        r.representative_suggestion ?? '',
+        r.diff ?? '',
+        r.suggestion_by_source ?? ''
+      ]);
+
+      const csv = Papa.unparse({ fields: headers, data });
+      const blob = new Blob([new TextEncoder().encode(csv)], {type:'text/csv;charset=utf-8;'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'filtered_review.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    function exportXLSX(rows) {
+      const data = rows.map(r => ({
+        page: r.page,
+        is_ocr: r.is_ocr,
+        sources: r.sources,
+        error_types: r.error_types,
+        sentence: r.sentence ?? '',
+        representative_suggestion: r.representative_suggestion ?? '',
+        diff: r.diff ?? '',
+        suggestion_by_source: r.suggestion_by_source ?? ''
+      }));
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'filtered');
+      XLSX.writeFile(wb, 'filtered_review.xlsx');
+    }
+
+    // ------- Events -------
+    $('modalClose').addEventListener('click', closeDetail);
+    $('modal').addEventListener('click', (e)=>{ if(e.target.id==='modal') closeDetail(); });
+
+    $('btnPrev').addEventListener('click', ()=>{ if(pageIndex>0){ pageIndex--; updateTable(); } });
+    $('btnNext').addEventListener('click', ()=>{
+      const total = filtered.length, max = Math.max(1, Math.ceil(total / pageSize));
+      if (pageIndex < max-1){ pageIndex++; updateTable(); }
+    });
+    $('pageSize').addEventListener('change', (e)=>{ pageSize = parseInt(e.target.value,10); pageIndex=0; updateTable(); });
+
+    document.querySelectorAll('th.sortable').forEach(th => {
+      th.addEventListener('click', () => {
+        const key = th.getAttribute('data-key');
+        if (sortKey === key) {
+          sortDir = (sortDir === 'asc') ? 'desc' : 'asc';
+        } else {
+          sortKey = key; sortDir = 'asc';
+          document.querySelectorAll('th.sortable').forEach(x => x.setAttribute('aria-sort','none'));
+        }
+        th.setAttribute('aria-sort', sortDir);
+        updateTable();
+      });
+    });
+
+    $('btnApply').addEventListener('click', applyFilters);
+    $('btnClear').addEventListener('click', clearFilters);
+    $('btnExportCSV').addEventListener('click', ()=> exportCSV(filtered));
+    $('btnExportXLSX').addEventListener('click', ()=> exportXLSX(filtered));
+    $('btnReset').addEventListener('click', ()=>{
+      localStorage.removeItem('ko-proof-viewer-state');
+      location.reload();
+    });
+
+    // File load
+    let pendingFile = null;
+    $('fileInput').addEventListener('change', (e)=> { pendingFile = e.target.files[0] || null; });
+    $('btnLoad').addEventListener('click', async ()=>{
+      if (!pendingFile) { error('파일을 선택하세요.'); return; }
+      await loadFile(pendingFile);
+    });
+
+    // Drag & drop
+    const dz = $('dropzone');
+    ;['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e=>{
+      e.preventDefault(); e.stopPropagation(); dz.classList.add('bg-blue-50');
+    }));
+    ;['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e=>{
+      e.preventDefault(); e.stopPropagation(); dz.classList.remove('bg-blue-50');
+    }));
+    dz.addEventListener('drop', (e)=>{
+      const f = e.dataTransfer.files?.[0]; if (f){ pendingFile=f; }
+    });
+
+    // ------- Load / Init -------
+    async function loadFile(file) {
+      try {
+        loading(true); error('');
+        let rows = await parseFile(file);
+        // normalize
+        rawData = rows.map(normalizeRow);
+        if (!rawData.length) throw new Error('행이 없습니다.');
+        show($('statsWrap'), true);
+        show($('chartsWrap'), true);
+        show($('filters'), true);
+        show($('tableWrap'), true);
+        summarize();
+        buildErrorTypeBox();
+        restoreFilterState();
+        applyFilters();
+      } catch (e) {
+        error(e.message || '파일 처리 실패');
+      } finally {
+        loading(false);
+      }
+    }
+
+    // ------- Persist filter state -------
+    function saveFilterState() {
+      const state = {
+        fPageFrom: $('fPageFrom').value,
+        fPageTo: $('fPageTo').value,
+        fOnlyOCR: $('fOnlyOCR').checked,
+        fOnlyMulti: $('fOnlyMulti').checked,
+        fOnlyRule: $('fOnlyRule').checked,
+        fSrcMode: $('fSrcMode').checked,
+        fQuery: $('fQuery').value,
+        fRegex: $('fRegex').checked,
+        fCase: $('fCase').checked,
+        pageSize,
+        sortKey,
+        sortDir,
+        sources: [...document.querySelectorAll('.srcCheck')].map(i=>({v:i.value, c:i.checked})),
+        errors:  [...document.querySelectorAll('.errCheck')].map(i=>({v:i.value, c:i.checked})),
+      };
+      localStorage.setItem('ko-proof-viewer-state', JSON.stringify(state));
+    }
+
+    function restoreFilterState() {
+      try {
+        const s = localStorage.getItem('ko-proof-viewer-state'); if (!s) return;
+        const st = JSON.parse(s);
+        $('fPageFrom').value = st.fPageFrom ?? '';
+        $('fPageTo').value   = st.fPageTo ?? '';
+        $('fOnlyOCR').checked= !!st.fOnlyOCR;
+        $('fOnlyMulti').checked= !!st.fOnlyMulti;
+        $('fOnlyRule').checked= !!st.fOnlyRule;
+        $('fSrcMode').checked= !!st.fSrcMode;
+        $('fQuery').value    = st.fQuery ?? '';
+        $('fRegex').checked  = !!st.fRegex;
+        $('fCase').checked   = !!st.fCase;
+        pageSize = parseInt(st.pageSize ?? 100, 10);
+        $('pageSize').value = String(pageSize);
+        sortKey = st.sortKey ?? 'page';
+        sortDir = st.sortDir ?? 'asc';
+        // apply checks
+        if (Array.isArray(st.sources)) {
+          st.sources.forEach(sv => {
+            const el = [...document.querySelectorAll('.srcCheck')].find(x => x.value === sv.v);
+            if (el) el.checked = !!sv.c;
+          });
+        }
+        if (Array.isArray(st.errors)) {
+          st.errors.forEach(ev => {
+            const el = [...document.querySelectorAll('.errCheck')].find(x => x.value === ev.v);
+            if (el) el.checked = !!ev.c;
+          });
+        }
+      } catch {}
+    }
+
+    // ------- Boot -------
+    (function init(){
+      show($('statsWrap'), false);
+      show($('chartsWrap'), false);
+      show($('filters'), false);
+      show($('tableWrap'), false);
+    })();
+  </script>
 </body>
 </html>
